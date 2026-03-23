@@ -1,0 +1,23 @@
+[Unit]
+Description=Pro-Notify Email Keyword Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/pro-notify
+ExecStart=/root/pro-notify/.venv/bin/python main.py
+Restart=always
+RestartSec=10
+
+# Environment (hoặc dùng .env file)
+# EnvironmentFile=/root/pro-notify/.env
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pro-notify
+
+[Install]
+WantedBy=multi-user.target
