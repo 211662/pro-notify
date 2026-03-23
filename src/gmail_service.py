@@ -36,6 +36,7 @@ class GmailService:
         self.email_address = Config.EMAIL_ADDRESS
         self.app_password = Config.EMAIL_APP_PASSWORD
         self._mail: imaplib.IMAP4_SSL | None = None
+        self._processed_ids: set[str] = set()  # Track processed email IDs to avoid duplicates
 
     def _connect(self) -> imaplib.IMAP4_SSL:
         """Connect and login to IMAP server."""
@@ -77,6 +78,9 @@ class GmailService:
 
             emails = []
             for eid in email_ids:
+                eid_str = eid.decode()
+                if eid_str in self._processed_ids:
+                    continue  # Skip already processed
                 parsed = self._fetch_email(mail, eid)
                 if parsed:
                     emails.append(parsed)
@@ -159,11 +163,12 @@ class GmailService:
         return body.strip()
 
     def mark_as_read(self, msg_id: str) -> None:
-        """Mark an email as read (add \\Seen flag)."""
+        """Mark an email as read (add \\Seen flag) and track as processed."""
         try:
             mail = self._ensure_connection()
             mail.select("INBOX")
             mail.store(msg_id.encode(), "+FLAGS", "\\Seen")
+            self._processed_ids.add(msg_id)
             logger.debug("Marked email %s as read.", msg_id)
         except Exception as e:
             logger.error("Error marking email %s as read: %s", msg_id, e)

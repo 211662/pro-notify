@@ -1,12 +1,37 @@
 """
 Pro-Notify Configuration Module
-Loads settings from .env file and provides config access.
+Loads settings from .env file or .env.encrypted (if available).
 """
 
 import os
+import logging
+
 from dotenv import load_dotenv
 
-load_dotenv()
+logger = logging.getLogger(__name__)
+
+
+def _load_config() -> None:
+    """Load config from .env.encrypted (priority) or .env fallback."""
+    from src.encryption import has_encrypted_env, decrypt_env
+
+    if has_encrypted_env():
+        logger.info("🔐 Found .env.encrypted — decrypting...")
+        try:
+            env_vars = decrypt_env()
+            for key, value in env_vars.items():
+                os.environ[key] = value
+            logger.info("🔓 Config loaded from encrypted file.")
+            return
+        except Exception as e:
+            logger.error("Failed to decrypt: %s", e)
+            logger.info("Falling back to .env file...")
+
+    load_dotenv()
+    logger.info("📄 Config loaded from .env file.")
+
+
+_load_config()
 
 
 class Config:

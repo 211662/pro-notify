@@ -1,5 +1,7 @@
-# Environment
+# Environment (plain .env NEVER committed, encrypted version is OK)
 .env
+!.env.example
+!.env.encrypted
 __pycache__/
 *.pyc
 .venv/
