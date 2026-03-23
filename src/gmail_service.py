@@ -5,6 +5,7 @@ Handles email fetching via IMAP — no Google Cloud needed.
 
 import imaplib
 import email
+import email.message
 import logging
 from email.header import decode_header
 from dataclasses import dataclass
