@@ -7,8 +7,7 @@ import re
 import logging
 from dataclasses import dataclass
 
-from src.config import Config
-from src.gmail_service import EmailMessage
+from src.email_service import EmailMessage
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +27,8 @@ class MatchResult:
 class KeywordMatcher:
     """Scans email content for configured keywords."""
 
-    def __init__(self, keywords: list[str] | None = None):
-        self.keywords = keywords or Config.KEYWORDS
+    def __init__(self, keywords: list[str]):
+        self.keywords = keywords
         # Pre-compile regex patterns for each keyword (case-insensitive, word boundary)
         self.patterns = {
             kw: re.compile(re.escape(kw), re.IGNORECASE)

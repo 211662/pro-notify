@@ -1,0 +1,54 @@
+# ═══════════════════════════════════════════════════════════
+# Pro-Notify — Multi-Account Configuration
+# ═══════════════════════════════════════════════════════════
+# Copy this file to accounts.yml and fill in your credentials.
+#
+# Each account defines:
+#   - name:           Friendly label (used in logs & notifications)
+#   - email:          Email address
+#   - app_password:   Gmail App Password (or IMAP password)
+#   - imap_server:    IMAP server (default: imap.gmail.com)
+#   - imap_port:      IMAP port (default: 993)
+#   - keywords:       List of keywords to monitor for this account
+#   - telegram:
+#       bot_token:    Telegram Bot API token
+#       chat_id:      Telegram chat ID to receive alerts
+#
+# You can have as many accounts as you need.
+# ═══════════════════════════════════════════════════════════
+
+accounts:
+  - name: "Personal Gmail"
+    email: "your-email@gmail.com"
+    app_password: "xxxx xxxx xxxx xxxx"
+    imap_server: "imap.gmail.com"
+    imap_port: 993
+    keywords:
+      - "dmca"
+      - "copyright"
+      - "invoice"
+      - "urgent"
+    telegram:
+      bot_token: "123456789:ABCDEF..."
+      chat_id: "751728238"
+
+  - name: "Work Outlook"
+    email: "your-email@outlook.com"
+    app_password: "your-app-password"
+    imap_server: "outlook.office365.com"
+    imap_port: 993
+    keywords:
+      - "invoice"
+      - "payment"
+      - "thanh toán"
+      - "cảnh báo"
+    telegram:
+      bot_token: "123456789:ABCDEF..."
+      chat_id: "987654321"
+
+# ═══════════════════════════════════════════════════════════
+# Global settings (optional — can also be set in .env)
+# ═══════════════════════════════════════════════════════════
+settings:
+  poll_interval: 60        # Seconds between email checks
+  max_results: 20          # Max emails to fetch per cycle

@@ -2,13 +2,17 @@
 
 **Email Keyword Monitor → Telegram Notification**
 
-Tự động quét email Gmail, khi phát hiện nội dung chứa keyword đã cấu hình → gửi thông báo sang Telegram Bot.
+Tự động quét email (Gmail, Outlook, Yahoo...), khi phát hiện nội dung chứa keyword đã cấu hình → gửi thông báo sang Telegram Bot. **Hỗ trợ nhiều tài khoản email**, mỗi tài khoản có keyword riêng và gửi tới chat Telegram riêng.
 
 ```
-┌──────────┐    poll     ┌───────────────┐   match?   ┌──────────────┐
-│  Gmail   │ ─────────▶  │ Keyword       │ ────────▶  │  Telegram    │
-│  Inbox   │  (unread)   │ Matcher       │  (yes)     │  Bot API     │
-└──────────┘             └───────────────┘            └──────────────┘
+                          ┌──────────────┐
+┌──────────┐    poll      │  Keyword     │   match?    ┌──────────────┐
+│ Email 1  │ ──────────▶  │  Matcher 1   │ ─────────▶  │  Chat ID A   │
+└──────────┘              └──────────────┘             └──────────────┘
+┌──────────┐    poll      ┌──────────────┐   match?    ┌──────────────┐
+│ Email 2  │ ──────────▶  │  Matcher 2   │ ─────────▶  │  Chat ID B   │
+└──────────┘              └──────────────┘             └──────────────┘
+        ...                     ...                         ...
 ```
 
 ---
@@ -17,16 +21,20 @@ Tự động quét email Gmail, khi phát hiện nội dung chứa keyword đã 
 
 ```
 pro-notify/
-├── main.py                  # Entry point — chạy polling loop
-├── requirements.txt         # Python dependencies
-├── .env.example             # Template biến môi trường
+├── main.py                    # Entry point — poll loop đa tài khoản
+├── accounts.example.yml       # Template cấu hình multi-account
+├── requirements.txt           # Python dependencies
+├── .env.example               # Template biến môi trường (single account)
 ├── .gitignore
 └── src/
     ├── __init__.py
-    ├── config.py            # Load config từ .env
-    ├── gmail_service.py     # Gmail API — OAuth2, fetch, mark-read
-    ├── telegram_service.py  # Telegram Bot API — gửi message
-    └── keyword_matcher.py   # Quét keyword trong email content
+    ├── config.py              # Load config từ .env (backward compat)
+    ├── account_manager.py     # Load & validate accounts.yml
+    ├── email_service.py       # IMAP email service (multi-provider)
+    ├── gmail_service.py       # Backward compat alias → email_service
+    ├── telegram_service.py    # Telegram Bot API — gửi message
+    ├── keyword_matcher.py     # Quét keyword trong email content
+    └── encryption.py          # Mã hóa .env bằng AES (Fernet)
 ```
 
 ---
@@ -49,13 +57,9 @@ pip install -r requirements.txt
 3. Tạo group/channel hoặc chat riêng với bot
 4. Lấy **CHAT_ID**:
    - Gửi 1 tin nhắn bất kỳ cho bot (ví dụ gửi "hello")
-   - Truy cập URL sau trên trình duyệt (**thay TOKEN bằng token thật, KHÔNG giữ dấu `<>`**):
+   - Truy cập URL sau trên trình duyệt:
      ```
      https://api.telegram.org/botTOKEN_CUA_BAN/getUpdates
-     ```
-     Ví dụ nếu token là `7012345678:AAHxxxxx` thì URL sẽ là:
-     ```
-     https://api.telegram.org/bot7012345678:AAHxxxxx/getUpdates
      ```
    - Trong kết quả JSON, tìm `"chat":{"id": 123456789}` → con số đó là CHAT_ID
 
@@ -66,20 +70,76 @@ pip install -r requirements.txt
    - Tìm "2-Step Verification" → Bật lên
 2. Tạo **App Password**:
    - Vào [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
-   - Hoặc: Google Account → Security → 2-Step Verification → App passwords
-   - Đặt tên app: `pro-notify`
-   - Nhấn **Create** → Google sẽ hiện mật khẩu dạng `xxxx xxxx xxxx xxxx`
-   - **Copy lại ngay** — chỉ hiện 1 lần!
+   - Đặt tên app: `pro-notify` → **Create** → copy mật khẩu `xxxx xxxx xxxx xxxx`
 
 > ⚠️ Nếu không thấy mục "App passwords", hãy chắc chắn đã bật 2FA trước.
 
-### 4. Cấu hình .env
+---
+
+## 📧 Cấu hình Multi-Account (Khuyến nghị)
+
+### Tạo `accounts.yml`
+
+```bash
+cp accounts.example.yml accounts.yml
+```
+
+Sửa `accounts.yml`:
+
+```yaml
+accounts:
+  - name: "Personal Gmail"
+    email: "your-email@gmail.com"
+    app_password: "xxxx xxxx xxxx xxxx"
+    imap_server: "imap.gmail.com"
+    imap_port: 993
+    keywords:
+      - "dmca"
+      - "copyright"
+      - "invoice"
+      - "urgent"
+    telegram:
+      bot_token: "7012345678:AAH...your_token"
+      chat_id: "123456789"
+
+  - name: "Work Outlook"
+    email: "work@outlook.com"
+    app_password: "your-password"
+    imap_server: "outlook.office365.com"
+    imap_port: 993
+    keywords:
+      - "invoice"
+      - "payment"
+      - "thanh toán"
+    telegram:
+      bot_token: "7012345678:AAH...your_token"
+      chat_id: "987654321"
+
+settings:
+  poll_interval: 60
+  max_results: 20
+```
+
+Mỗi account có thể:
+- **Keyword riêng** — monitor những từ khóa khác nhau
+- **Chat Telegram riêng** — gửi tới group/person khác nhau
+- **IMAP server riêng** — Gmail, Outlook, Yahoo, bất kỳ IMAP nào
+
+### Chạy
+
+```bash
+python main.py
+```
+
+---
+
+## 📧 Cấu hình Single Account (Backward compat)
+
+Nếu chỉ có 1 tài khoản, dùng `.env` như Phase 1:
 
 ```bash
 cp .env.example .env
 ```
-
-Sửa file `.env`:
 
 ```env
 TELEGRAM_BOT_TOKEN=7012345678:AAH...your_token_here
@@ -89,35 +149,31 @@ EMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
 IMAP_SERVER=imap.gmail.com
 IMAP_PORT=993
 POLL_INTERVAL=60
-KEYWORDS=abc,def,urgent,invoice,thanh toán
+KEYWORDS=dmca,copyright,invoice,urgent,thanh toán
 ```
 
-> **KEYWORDS** là danh sách keyword cách nhau bởi dấu phẩy.
-> Matching **không phân biệt** hoa thường.
-
-### 5. Chạy
+> Khi KHÔNG có `accounts.yml`, app tự động fallback sang `.env`.
 
 ```bash
 python main.py
 ```
 
-- Không cần đăng nhập trình duyệt — IMAP + App Password kết nối trực tiếp
-- Bot sẽ gửi tin nhắn "🟢 Pro-Notify started" vào Telegram khi chạy thành công
-
 ---
 
 ## ⚙️ Cách hoạt động
 
-1. **Poll**: Mỗi `POLL_INTERVAL` giây, app kết nối Gmail qua IMAP, lấy email chưa đọc (UNSEEN)
-2. **Match**: Quét `subject` + `body` + `snippet` → tìm keyword (case-insensitive)
-3. **Notify**: Nếu match → gửi thông báo chi tiết qua Telegram Bot
-4. **Mark read**: Email đã xử lý được đánh dấu đã đọc → tránh gửi trùng
+1. **Load accounts**: Đọc `accounts.yml` (hoặc fallback `.env` nếu chỉ có 1 tài khoản)
+2. **Poll**: Mỗi `poll_interval` giây, kết nối IMAP cho **từng account**, lấy email UNSEEN
+3. **Match**: Quét `subject` + `body` + `snippet` → tìm keyword (case-insensitive)
+4. **Notify**: Nếu match → gửi thông báo chi tiết qua Telegram Bot tới chat tương ứng
+5. **Mark read**: Email đã xử lý được đánh dấu đã đọc → tránh gửi trùng
 
 ### Telegram notification mẫu
 
 ```
 📧 Email Alert
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Account: Personal Gmail
 From: boss@company.com
 Subject: Invoice tháng 3 - cần thanh toán
 Date: Mon, 23 Mar 2026 10:30:00 +0700
@@ -231,14 +287,18 @@ schedule:
 
 ---
 
-## 🗺 Roadmap (sau MVP)
+## 🗺 Roadmap
 
-- [ ] Hỗ trợ regex pattern cho keyword matching
+- [x] MVP — Gmail keyword monitor → Telegram
+- [x] IMAP + App Password (không cần Google Cloud)
+- [x] Encryption (.env.encrypted)
+- [x] GitHub Actions / VPS deployment
+- [x] **Phase 2** — Multi-account, per-account keywords & routing
+- [ ] **Phase 3** — Gold price bot, Weather bot
+- [ ] Regex pattern cho keyword matching
 - [ ] Web dashboard quản lý keyword
-- [ ] Gmail Push Notification (Pub/Sub) thay vì polling
-- [ ] Hỗ trợ nhiều email provider (Outlook, Yahoo)
-- [ ] Lưu history vào SQLite/PostgreSQL
 - [ ] Docker container hóa
+- [ ] Lưu history vào SQLite
 
 ---
 

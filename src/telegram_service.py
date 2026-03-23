@@ -1,14 +1,12 @@
 """
 Telegram Service Module
 Handles sending messages to Telegram via Bot API.
+Accepts per-account token & chat_id (no dependency on global Config).
 """
 
 import logging
-from dataclasses import dataclass
 
 import requests
-
-from src.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +19,10 @@ class TelegramService:
 
     BASE_URL = "https://api.telegram.org/bot{token}"
 
-    def __init__(self):
-        self.token = Config.TELEGRAM_BOT_TOKEN
-        self.chat_id = Config.TELEGRAM_CHAT_ID
+    def __init__(self, bot_token: str, chat_id: str, account_name: str = "default"):
+        self.token = bot_token
+        self.chat_id = chat_id
+        self.account_name = account_name
         self.base_url = self.BASE_URL.format(token=self.token)
 
     def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
@@ -75,13 +74,16 @@ class TelegramService:
         date: str,
         body_preview: str,
         matched_keywords: list[str],
+        account_label: str = "",
     ) -> bool:
         """Send a formatted email notification to Telegram."""
         keyword_tags = " ".join(f"#{kw}" for kw in matched_keywords)
+        account_line = f"<b>Account:</b> {self._escape_html(account_label)}\n" if account_label else ""
 
         message = (
             f"📧 <b>Email Alert</b>\n"
             f"{'━' * 30}\n"
+            f"{account_line}"
             f"<b>From:</b> {self._escape_html(sender)}\n"
             f"<b>Subject:</b> {self._escape_html(subject)}\n"
             f"<b>Date:</b> {self._escape_html(date)}\n"

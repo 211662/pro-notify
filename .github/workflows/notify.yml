@@ -28,6 +28,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Create accounts.yml from secret (if available)
+        if: ${{ env.ACCOUNTS_YML != '' }}
+        env:
+          ACCOUNTS_YML: ${{ secrets.ACCOUNTS_YML }}
+        run: echo "$ACCOUNTS_YML" > accounts.yml
+
       - name: Run email check
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

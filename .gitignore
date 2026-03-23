@@ -2,6 +2,11 @@
 .env
 !.env.example
 !.env.encrypted
+
+# Multi-account config (contains credentials)
+accounts.yml
+!accounts.example.yml
+
 __pycache__/
 *.pyc
 .venv/
