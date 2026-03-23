@@ -1,0 +1,38 @@
+name: Pro-Notify Email Monitor
+
+on:
+  # Chạy mỗi 2 phút
+  schedule:
+    - cron: '*/2 * * * *'
+
+  # Cho phép chạy thủ công từ GitHub
+  workflow_dispatch:
+
+jobs:
+  check-email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run email check
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
+          IMAP_SERVER: imap.gmail.com
+          IMAP_PORT: '993'
+          KEYWORDS: ${{ secrets.KEYWORDS }}
+        run: python main.py --once

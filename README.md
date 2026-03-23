@@ -184,6 +184,53 @@ python -m src.encryption decrypt     # Xem các biến đã mã hóa (hiện mas
 
 ---
 
+## ☁️ Chạy 24/7 với GitHub Actions (miễn phí)
+
+Không cần mở máy — GitHub tự động chạy check email mỗi 2 phút.
+
+### Bước 1: Thêm Secrets vào GitHub repo
+
+Vào repo trên GitHub → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+
+Thêm lần lượt 5 secrets:
+
+| Secret name | Value |
+|-------------|-------|
+| `TELEGRAM_BOT_TOKEN` | Token bot Telegram |
+| `TELEGRAM_CHAT_ID` | Chat ID Telegram |
+| `EMAIL_ADDRESS` | Email Gmail |
+| `EMAIL_APP_PASSWORD` | App Password Gmail |
+| `KEYWORDS` | `dmca,copyright,invoice,...` |
+
+### Bước 2: Push code lên GitHub
+
+```bash
+git add .
+git commit -m "Add GitHub Actions workflow"
+git push
+```
+
+### Bước 3: Xong!
+
+- GitHub Actions sẽ **tự động chạy mỗi 2 phút**
+- Kiểm tra tại: repo → tab **Actions** → workflow "Pro-Notify Email Monitor"
+- Có thể nhấn **Run workflow** để test thủ công
+
+### Tùy chỉnh tần suất
+
+Sửa cron trong `.github/workflows/notify.yml`:
+
+```yaml
+schedule:
+  - cron: '*/2 * * * *'   # Mỗi 2 phút
+  - cron: '*/5 * * * *'   # Mỗi 5 phút
+  - cron: '*/10 * * * *'  # Mỗi 10 phút
+```
+
+> 📌 GitHub Actions free: **2,000 phút/tháng**. Mỗi 2 phút ≈ 720 lần/ngày × ~0.5 phút = ~360 phút/ngày → đủ dùng nếu chạy mỗi 5 phút.
+
+---
+
 ## 🗺 Roadmap (sau MVP)
 
 - [ ] Hỗ trợ regex pattern cho keyword matching
@@ -192,7 +239,6 @@ python -m src.encryption decrypt     # Xem các biến đã mã hóa (hiện mas
 - [ ] Hỗ trợ nhiều email provider (Outlook, Yahoo)
 - [ ] Lưu history vào SQLite/PostgreSQL
 - [ ] Docker container hóa
-- [ ] Cron/Systemd service cho production
 
 ---
 

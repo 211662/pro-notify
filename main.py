@@ -73,7 +73,9 @@ def run_once(
 
 
 def main() -> None:
-    """Start the polling loop."""
+    """Start the app. Use --once flag for single run (GitHub Actions)."""
+    single_run = "--once" in sys.argv
+
     # ── Validate config ──
     errors = Config.validate()
     if errors:
@@ -82,7 +84,6 @@ def main() -> None:
         sys.exit(1)
 
     logger.info("Keywords to monitor: %s", Config.KEYWORDS)
-    logger.info("Poll interval: %ds", Config.POLL_INTERVAL)
 
     # ── Init services ──
     telegram = TelegramService()
@@ -93,14 +94,26 @@ def main() -> None:
     gmail = GmailService()
     matcher = KeywordMatcher()
 
-    # Send startup message
+    # ── Single run mode (for GitHub Actions / cron) ──
+    if single_run:
+        logger.info("🔄 Running single check...")
+        try:
+            count = run_once(gmail, telegram, matcher)
+            logger.info("Done — %d notification(s) sent.", count)
+        except Exception as exc:
+            logger.exception("Error: %s", exc)
+            sys.exit(1)
+        return
+
+    # ── Poll loop mode (for local / VPS) ──
+    logger.info("Poll interval: %ds", Config.POLL_INTERVAL)
+
     telegram.send_message(
         f"🟢 <b>Pro-Notify started</b>\n"
         f"Monitoring keywords: <code>{', '.join(Config.KEYWORDS)}</code>\n"
         f"Poll interval: {Config.POLL_INTERVAL}s",
     )
 
-    # ── Poll loop ──
     logger.info("🚀 Pro-Notify is running. Press Ctrl+C to stop.")
     while _running:
         try:
@@ -110,13 +123,11 @@ def main() -> None:
         except Exception as exc:
             logger.exception("Error during poll cycle: %s", exc)
 
-        # Sleep in small increments so we can react to signals quickly
         for _ in range(Config.POLL_INTERVAL):
             if not _running:
                 break
             time.sleep(1)
 
-    # Shutdown
     telegram.send_message("🔴 <b>Pro-Notify stopped</b>")
     logger.info("Pro-Notify stopped.")
 
