@@ -1,20 +1,12 @@
 # ═══════════════════════════════════════════════════════════
-# Pro-Notify — Multi-Account Configuration
+# Pro-Notify — Multi-Account & Bot Configuration
 # ═══════════════════════════════════════════════════════════
 # Copy this file to accounts.yml and fill in your credentials.
 #
-# Each account defines:
-#   - name:           Friendly label (used in logs & notifications)
-#   - email:          Email address
-#   - app_password:   Gmail App Password (or IMAP password)
-#   - imap_server:    IMAP server (default: imap.gmail.com)
-#   - imap_port:      IMAP port (default: 993)
-#   - keywords:       List of keywords to monitor for this account
-#   - telegram:
-#       bot_token:    Telegram Bot API token
-#       chat_id:      Telegram chat ID to receive alerts
-#
-# You can have as many accounts as you need.
+# Supports:
+#   - Multiple email accounts with per-account keywords
+#   - Gold price monitoring with alerts
+#   - Weather updates with severe weather warnings
 # ═══════════════════════════════════════════════════════════
 
 accounts:
@@ -47,7 +39,38 @@ accounts:
       chat_id: "987654321"
 
 # ═══════════════════════════════════════════════════════════
-# Global settings (optional — can also be set in .env)
+# Gold Price Bot
+# ═══════════════════════════════════════════════════════════
+gold:
+  enabled: true
+  telegram:
+    bot_token: "123456789:ABCDEF..."
+    chat_id: "751728238"
+  schedule:
+    interval: 0                        # 0 = chỉ chạy theo times
+    times: ["07:00", "12:00", "18:00"] # Gửi giá vàng lúc 7h, 12h, 18h
+  alerts:                              # Cảnh báo khi giá vượt ngưỡng
+    SJC:
+      above: 95000                     # Cảnh báo khi SJC ≥ 95tr
+      below: 85000                     # Cảnh báo khi SJC ≤ 85tr
+
+# ═══════════════════════════════════════════════════════════
+# Weather Bot
+# ═══════════════════════════════════════════════════════════
+weather:
+  enabled: true
+  api_key: "YOUR_OPENWEATHERMAP_API_KEY"  # Free: https://openweathermap.org/api
+  city: "Ho Chi Minh City"
+  telegram:
+    bot_token: "123456789:ABCDEF..."
+    chat_id: "751728238"
+  schedule:
+    interval: 0
+    times: ["06:30", "18:00"]          # Dự báo sáng + chiều
+  severe_alert: true                   # Cảnh báo thời tiết xấu (mỗi giờ check)
+
+# ═══════════════════════════════════════════════════════════
+# Global settings
 # ═══════════════════════════════════════════════════════════
 settings:
   poll_interval: 60        # Seconds between email checks

@@ -1,6 +1,6 @@
 """
 Pro-Notify — Email Keyword Monitor → Telegram Notification
-Phase 2: Multi-account support with per-account keywords & Telegram routing.
+Phase 3: Multi-account + Gold Price + Weather bots.
 """
 
 import sys
@@ -12,12 +12,20 @@ from dataclasses import dataclass
 from src.account_manager import (
     AccountConfig,
     GlobalSettings,
+    GoldConfig,
+    WeatherConfig,
     load_accounts,
     validate_all_accounts,
 )
 from src.email_service import EmailService
 from src.telegram_service import TelegramService
 from src.keyword_matcher import KeywordMatcher
+from src.scheduler import ScheduledTask
+from src.gold_price_service import fetch_gold_prices, format_gold_message, check_price_alert
+from src.weather_service import (
+    fetch_current_weather, fetch_forecast,
+    format_weather_message, check_severe_weather,
+)
 
 # ── Logging ──────────────────────────────────────────────
 logging.basicConfig(
@@ -129,7 +137,7 @@ def main() -> None:
 
     # ── Load accounts ──
     try:
-        accounts, settings = load_accounts()
+        accounts, settings, gold_cfg, weather_cfg = load_accounts()
     except Exception as exc:
         logger.error("Failed to load accounts: %s", exc)
         sys.exit(1)
@@ -147,6 +155,10 @@ def main() -> None:
     for acct in accounts:
         logger.info("  📧 %s (%s) → %d keywords → chat %s",
                      acct.name, acct.email, len(acct.keywords), acct.telegram.chat_id)
+    if gold_cfg.enabled:
+        logger.info("  🥇 Gold price bot: ON")
+    if weather_cfg.enabled:
+        logger.info("  🌤 Weather bot: ON (%s)", weather_cfg.city)
     logger.info("━" * 50)
 
     # ── Build workers ──
@@ -158,12 +170,55 @@ def main() -> None:
             logger.error("[%s] Cannot connect to Telegram bot.", worker.config.name)
             sys.exit(1)
 
+    # ── Build gold & weather schedulers ──
+    gold_task = None
+    gold_tg = None
+    if gold_cfg.enabled and gold_cfg.telegram:
+        gold_task = ScheduledTask(
+            name="gold_price",
+            interval_minutes=gold_cfg.schedule_interval,
+            daily_times=gold_cfg.schedule_times,
+        )
+        gold_tg = TelegramService(
+            bot_token=gold_cfg.telegram.bot_token,
+            chat_id=gold_cfg.telegram.chat_id,
+            account_name="GoldBot",
+        )
+        logger.info("🥇 Gold schedule: %s", gold_task.next_run_info())
+
+    weather_task = None
+    weather_severe_task = None
+    weather_tg = None
+    if weather_cfg.enabled and weather_cfg.telegram and weather_cfg.api_key:
+        weather_task = ScheduledTask(
+            name="weather",
+            interval_minutes=weather_cfg.schedule_interval,
+            daily_times=weather_cfg.schedule_times,
+        )
+        weather_tg = TelegramService(
+            bot_token=weather_cfg.telegram.bot_token,
+            chat_id=weather_cfg.telegram.chat_id,
+            account_name="WeatherBot",
+        )
+        logger.info("🌤 Weather schedule: %s", weather_task.next_run_info())
+
+        if weather_cfg.severe_alert:
+            weather_severe_task = ScheduledTask(
+                name="weather_severe",
+                interval_minutes=60,  # Check severe weather every hour
+            )
+
     # ── Single run mode ──
     if single_run:
         logger.info("🔄 Running single check...")
         try:
             count = run_once(workers, max_results=settings.max_results)
-            logger.info("Done — %d notification(s) sent.", count)
+            # Also run gold & weather once
+            if gold_task and gold_tg:
+                _run_gold_task(gold_cfg, gold_tg)
+            if weather_task and weather_tg:
+                _run_weather_task(weather_cfg, weather_tg)
+            logger.info("Done — %d email notification(s) sent.", count)
         except Exception as exc:
             logger.exception("Error: %s", exc)
             sys.exit(1)
@@ -181,11 +236,18 @@ def main() -> None:
                 w.config.name for w in workers
                 if f"{w.telegram_svc.token}:{w.telegram_svc.chat_id}" == chat_key
             ]
+            features = []
+            if gold_cfg.enabled:
+                features.append("🥇 Giá vàng")
+            if weather_cfg.enabled:
+                features.append(f"🌤 Thời tiết ({weather_cfg.city})")
+            feature_line = f"\nBots: {', '.join(features)}" if features else ""
             worker.telegram_svc.send_message(
                 f"🟢 <b>Pro-Notify started</b>\n"
                 f"Monitoring {len(account_names)} account(s): "
                 f"<code>{', '.join(account_names)}</code>\n"
-                f"Poll interval: {settings.poll_interval}s",
+                f"Poll interval: {settings.poll_interval}s"
+                f"{feature_line}",
             )
             seen_chats.add(chat_key)
 
@@ -193,9 +255,35 @@ def main() -> None:
 
     while _running:
         try:
+            # Email check
             count = run_once(workers, max_results=settings.max_results)
             if count:
                 logger.info("Cycle complete — %d notification(s) sent.", count)
+
+            # Gold price check
+            if gold_task and gold_tg and gold_task.should_run():
+                try:
+                    _run_gold_task(gold_cfg, gold_tg)
+                    gold_task.mark_done()
+                except Exception as exc:
+                    logger.exception("Gold price error: %s", exc)
+
+            # Weather check
+            if weather_task and weather_tg and weather_task.should_run():
+                try:
+                    _run_weather_task(weather_cfg, weather_tg)
+                    weather_task.mark_done()
+                except Exception as exc:
+                    logger.exception("Weather error: %s", exc)
+
+            # Severe weather check (every hour)
+            if weather_severe_task and weather_tg and weather_severe_task.should_run():
+                try:
+                    _run_severe_weather_check(weather_cfg, weather_tg)
+                    weather_severe_task.mark_done()
+                except Exception as exc:
+                    logger.exception("Severe weather check error: %s", exc)
+
         except Exception as exc:
             logger.exception("Error during poll cycle: %s", exc)
 
@@ -216,6 +304,52 @@ def main() -> None:
             seen_chats.add(chat_key)
 
     logger.info("Pro-Notify stopped.")
+
+
+# ── Gold & Weather runners ───────────────────────────────
+def _run_gold_task(gold_cfg: GoldConfig, tg: TelegramService) -> None:
+    """Fetch gold prices and send to Telegram."""
+    prices = fetch_gold_prices()
+    if not prices:
+        logger.warning("🥇 No gold prices fetched.")
+        return
+
+    # Send price update
+    msg = format_gold_message(prices)
+    tg.send_message(msg, parse_mode="HTML")
+    logger.info("🥇 Gold prices sent to Telegram.")
+
+    # Check alerts
+    if gold_cfg.alerts:
+        alerts = check_price_alert(prices, gold_cfg.alerts)
+        for alert in alerts:
+            tg.send_message(alert, parse_mode="HTML")
+            logger.info("🥇 Gold alert: %s", alert[:80])
+
+
+def _run_weather_task(weather_cfg: WeatherConfig, tg: TelegramService) -> None:
+    """Fetch weather and send forecast to Telegram."""
+    current = fetch_current_weather(weather_cfg.city, weather_cfg.api_key)
+    if not current:
+        logger.warning("🌤 No weather data fetched.")
+        return
+
+    forecasts = fetch_forecast(weather_cfg.city, weather_cfg.api_key)
+    msg = format_weather_message(current, forecasts)
+    tg.send_message(msg, parse_mode="HTML")
+    logger.info("🌤 Weather sent to Telegram: %s %.1f°C", current["weather_desc"], current["temp"])
+
+
+def _run_severe_weather_check(weather_cfg: WeatherConfig, tg: TelegramService) -> None:
+    """Check for severe weather conditions and alert."""
+    current = fetch_current_weather(weather_cfg.city, weather_cfg.api_key)
+    if not current:
+        return
+
+    alert = check_severe_weather(current)
+    if alert:
+        tg.send_message(alert, parse_mode="HTML")
+        logger.warning("⚠️ Severe weather alert sent!")
 
 
 if __name__ == "__main__":

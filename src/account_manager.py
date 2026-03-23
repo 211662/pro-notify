@@ -2,6 +2,7 @@
 Account Manager Module
 Loads and validates multi-account configuration from accounts.yml.
 Falls back to single-account from .env for backward compatibility.
+Supports gold price & weather bot configs (Phase 3).
 """
 
 import os
@@ -56,6 +57,28 @@ class GlobalSettings:
     max_results: int = 20
 
 
+@dataclass
+class GoldConfig:
+    """Gold price bot configuration."""
+    enabled: bool = False
+    telegram: TelegramConfig | None = None
+    schedule_interval: int = 0
+    schedule_times: list[str] = field(default_factory=list)
+    alerts: dict = field(default_factory=dict)  # {"SJC": {"above": 95000, "below": 85000}}
+
+
+@dataclass
+class WeatherConfig:
+    """Weather bot configuration."""
+    enabled: bool = False
+    api_key: str = ""
+    city: str = "Ho Chi Minh City"
+    telegram: TelegramConfig | None = None
+    schedule_interval: int = 0
+    schedule_times: list[str] = field(default_factory=list)
+    severe_alert: bool = True
+
+
 def _get_project_root() -> str:
     """Get the project root directory."""
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -86,10 +109,10 @@ def _parse_account(raw: dict, index: int) -> AccountConfig:
     )
 
 
-def load_accounts_from_yaml(path: str | None = None) -> tuple[list[AccountConfig], GlobalSettings]:
+def load_accounts_from_yaml(path: str | None = None) -> tuple[list[AccountConfig], GlobalSettings, GoldConfig, WeatherConfig]:
     """
     Load accounts from accounts.yml.
-    Returns (accounts, global_settings).
+    Returns (accounts, global_settings, gold_config, weather_config).
     """
     if path is None:
         path = os.path.join(_get_project_root(), ACCOUNTS_FILE)
@@ -116,11 +139,64 @@ def load_accounts_from_yaml(path: str | None = None) -> tuple[list[AccountConfig
         max_results=int(raw_settings.get("max_results", 20)),
     )
 
+    # Gold config
+    gold_config = _parse_gold_config(data.get("gold", {}))
+
+    # Weather config
+    weather_config = _parse_weather_config(data.get("weather", {}))
+
     logger.info("Loaded %d account(s) from %s", len(accounts), ACCOUNTS_FILE)
-    return accounts, settings
+    if gold_config.enabled:
+        logger.info("  🥇 Gold price bot: enabled")
+    if weather_config.enabled:
+        logger.info("  🌤 Weather bot: enabled (%s)", weather_config.city)
+
+    return accounts, settings, gold_config, weather_config
 
 
-def load_accounts_from_env() -> tuple[list[AccountConfig], GlobalSettings]:
+def _parse_gold_config(raw: dict) -> GoldConfig:
+    """Parse gold price config from YAML."""
+    if not raw or not raw.get("enabled", False):
+        return GoldConfig()
+
+    tg_raw = raw.get("telegram", {})
+    sched = raw.get("schedule", {})
+
+    return GoldConfig(
+        enabled=True,
+        telegram=TelegramConfig(
+            bot_token=tg_raw.get("bot_token", ""),
+            chat_id=str(tg_raw.get("chat_id", "")),
+        ),
+        schedule_interval=int(sched.get("interval", 0)),
+        schedule_times=sched.get("times", []),
+        alerts=raw.get("alerts", {}),
+    )
+
+
+def _parse_weather_config(raw: dict) -> WeatherConfig:
+    """Parse weather config from YAML."""
+    if not raw or not raw.get("enabled", False):
+        return WeatherConfig()
+
+    tg_raw = raw.get("telegram", {})
+    sched = raw.get("schedule", {})
+
+    return WeatherConfig(
+        enabled=True,
+        api_key=raw.get("api_key", ""),
+        city=raw.get("city", "Ho Chi Minh City"),
+        telegram=TelegramConfig(
+            bot_token=tg_raw.get("bot_token", ""),
+            chat_id=str(tg_raw.get("chat_id", "")),
+        ),
+        schedule_interval=int(sched.get("interval", 0)),
+        schedule_times=sched.get("times", []),
+        severe_alert=raw.get("severe_alert", True),
+    )
+
+
+def load_accounts_from_env() -> tuple[list[AccountConfig], GlobalSettings, GoldConfig, WeatherConfig]:
     """
     Fallback: build a single AccountConfig from .env / environment variables.
     Backward compatible with Phase 1 single-account setup.
@@ -148,16 +224,16 @@ def load_accounts_from_env() -> tuple[list[AccountConfig], GlobalSettings]:
     )
 
     logger.info("Loaded single account from .env (backward-compat mode)")
-    return [account], settings
+    return [account], settings, GoldConfig(), WeatherConfig()
 
 
-def load_accounts() -> tuple[list[AccountConfig], GlobalSettings]:
+def load_accounts() -> tuple[list[AccountConfig], GlobalSettings, GoldConfig, WeatherConfig]:
     """
     Load accounts with priority:
-    1. accounts.yml (multi-account)
+    1. accounts.yml (multi-account + gold + weather)
     2. .env / environment variables (single account, backward compat)
 
-    Returns (accounts, global_settings).
+    Returns (accounts, global_settings, gold_config, weather_config).
     """
     root = _get_project_root()
     yml_path = os.path.join(root, ACCOUNTS_FILE)
