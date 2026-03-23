@@ -12,21 +12,31 @@ logger = logging.getLogger(__name__)
 
 
 def _load_config() -> None:
-    """Load config from .env.encrypted (priority) or .env fallback."""
-    from src.encryption import has_encrypted_env, decrypt_env
+    """
+    Load config priority:
+    1. Environment variables (already set, e.g. GitHub Actions secrets)
+    2. .env.encrypted (if exists, ask master password)
+    3. .env file (local development)
+    """
+    # If env vars already set (GitHub Actions), skip everything
+    if os.getenv("TELEGRAM_BOT_TOKEN") and os.getenv("EMAIL_ADDRESS"):
+        logger.info("✅ Config loaded from environment variables.")
+        return
 
-    if has_encrypted_env():
-        logger.info("🔐 Found .env.encrypted — decrypting...")
-        try:
+    # Try encrypted file
+    try:
+        from src.encryption import has_encrypted_env, decrypt_env
+        if has_encrypted_env():
+            logger.info("🔐 Found .env.encrypted — decrypting...")
             env_vars = decrypt_env()
             for key, value in env_vars.items():
                 os.environ[key] = value
             logger.info("🔓 Config loaded from encrypted file.")
             return
-        except Exception as e:
-            logger.error("Failed to decrypt: %s", e)
-            logger.info("Falling back to .env file...")
+    except Exception as e:
+        logger.warning("Encrypted config failed: %s", e)
 
+    # Fallback to .env
     load_dotenv()
     logger.info("📄 Config loaded from .env file.")
 
