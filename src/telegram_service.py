@@ -77,7 +77,7 @@ class TelegramService:
         account_label: str = "",
     ) -> bool:
         """Send a formatted email notification to Telegram."""
-        keyword_tags = " ".join(f"#{kw}" for kw in matched_keywords)
+        keyword_tags = " ".join(f"#{self._escape_html(kw)}" for kw in matched_keywords)
         account_line = f"<b>Account:</b> {self._escape_html(account_label)}\n" if account_label else ""
 
         message = (
