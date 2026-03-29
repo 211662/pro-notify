@@ -75,7 +75,7 @@ def build_workers(accounts: list[AccountConfig]) -> list[AccountWorker]:
             chat_id=acct.telegram.chat_id,
             account_name=acct.name,
         )
-        matcher = KeywordMatcher(keywords=acct.keywords)
+        matcher = KeywordMatcher(keywords=acct.keywords, sender_filters=acct.sender_filters)
         workers.append(AccountWorker(
             config=acct,
             email_svc=email_svc,

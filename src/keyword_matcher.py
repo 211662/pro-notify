@@ -25,22 +25,39 @@ class MatchResult:
 
 
 class KeywordMatcher:
-    """Scans email content for configured keywords."""
+    """Scans email content for configured keywords and sender filters."""
 
-    def __init__(self, keywords: list[str]):
+    def __init__(self, keywords: list[str], sender_filters: list[str] | None = None):
         self.keywords = keywords
+        self.sender_filters = [s.lower() for s in (sender_filters or [])]
         # Pre-compile regex patterns for each keyword (case-insensitive, word boundary)
         self.patterns = {
             kw: re.compile(re.escape(kw), re.IGNORECASE)
             for kw in self.keywords
         }
-        logger.info("KeywordMatcher initialized with %d keywords: %s", len(self.keywords), self.keywords)
+        logger.info(
+            "KeywordMatcher initialized with %d keywords, %d sender_filters",
+            len(self.keywords), len(self.sender_filters),
+        )
+
+    def _match_sender(self, sender: str) -> bool:
+        """Check if sender matches any sender_filter."""
+        if not self.sender_filters or not sender:
+            return False
+        sender_lower = sender.lower()
+        return any(sf in sender_lower for sf in self.sender_filters)
 
     def match(self, email: EmailMessage) -> MatchResult:
-        """Check if an email matches any configured keywords."""
+        """Check if an email matches any configured keywords or sender filters."""
         matched_keywords = []
         matched_in = set()
 
+        # 1. Check sender filters — match ALL emails from these senders
+        if self._match_sender(email.sender):
+            matched_keywords.append(f"sender:{email.sender}")
+            matched_in.add("sender")
+
+        # 2. Check keyword patterns in subject/body/snippet
         searchable_fields = {
             "subject": email.subject,
             "body": email.body,

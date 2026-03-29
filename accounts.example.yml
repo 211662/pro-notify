@@ -38,6 +38,19 @@ accounts:
       bot_token: "123456789:ABCDEF..."
       chat_id: "987654321"
 
+  - name: "Google Ads Monitor"
+    email: "your-ads-email@gmail.com"
+    app_password: "xxxx xxxx xxxx xxxx"
+    imap_server: "imap.gmail.com"
+    imap_port: 993
+    keywords:
+      - "advertiser verification"
+    sender_filters:                          # Forward ALL emails from these senders
+      - "ads-account-noreply@google.com"
+    telegram:
+      bot_token: "123456789:ABCDEF..."
+      chat_id: "751728238"
+
 # ═══════════════════════════════════════════════════════════
 # Gold Price Bot
 # ═══════════════════════════════════════════════════════════

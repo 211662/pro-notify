@@ -33,6 +33,7 @@ class AccountConfig:
     imap_port: int
     keywords: list[str]
     telegram: TelegramConfig
+    sender_filters: list[str] = field(default_factory=list)  # Match ALL emails from these senders
 
     def validate(self) -> list[str]:
         """Validate this account config. Returns list of errors."""
@@ -41,8 +42,8 @@ class AccountConfig:
             errors.append(f"[{self.name}] email is required")
         if not self.app_password:
             errors.append(f"[{self.name}] app_password is required")
-        if not self.keywords:
-            errors.append(f"[{self.name}] keywords list is empty")
+        if not self.keywords and not self.sender_filters:
+            errors.append(f"[{self.name}] keywords or sender_filters is required")
         if not self.telegram.bot_token:
             errors.append(f"[{self.name}] telegram.bot_token is required")
         if not self.telegram.chat_id:
@@ -95,6 +96,12 @@ def _parse_account(raw: dict, index: int) -> AccountConfig:
         if isinstance(kw, str) and kw.strip()
     ]
 
+    sender_filters = [
+        s.strip().lower()
+        for s in raw.get("sender_filters", [])
+        if isinstance(s, str) and s.strip()
+    ]
+
     return AccountConfig(
         name=name,
         email=raw.get("email", ""),
@@ -102,6 +109,7 @@ def _parse_account(raw: dict, index: int) -> AccountConfig:
         imap_server=raw.get("imap_server", "imap.gmail.com"),
         imap_port=int(raw.get("imap_port", 993)),
         keywords=keywords,
+        sender_filters=sender_filters,
         telegram=TelegramConfig(
             bot_token=telegram_raw.get("bot_token", ""),
             chat_id=str(telegram_raw.get("chat_id", "")),
